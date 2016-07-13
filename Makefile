@@ -1,14 +1,13 @@
+CFLAGS = -Wall
+
 all: build
 
 build: main
 
 main:
-	clang -o bin/trial-c src/main.c
+	clang $(CFLAGS) -o bin/trial-c src/main.c
 
-driver:
-	clang -o bin/driver src/driver.c
-
-test:
+test: main
 	bin/test.sh
 
 clean:
