@@ -1,7 +1,7 @@
 function compile {
   echo "$1" | bin/trial-c > tmp/test.s
   if [ $? -ne 0 ]; then
-    echo "Failed to compile $1"
+    echo "Failed to compile $2"
     exit
   fi
   gcc -o bin/test src/driver.c tmp/test.s
@@ -23,7 +23,7 @@ function assertequal {
 function testast {
   result="$(echo "$2" | bin/trial-c -a)"
   if [ $? -ne 0 ]; then
-    echo "Failed to compile $1"
+    echo "Failed to compile $2"
     exit
   fi
   assertequal "$result" "$1"
@@ -51,6 +51,7 @@ testast '(+ (/ 4 2) (/ 6 3))' '4/2+6/3;'
 testast '(/ (/ 24 2) 4)' '24/2/4;'
 testast '(decl int a 3)' 'int a=3;'
 testast "(decl char c 'a')" "char c = 'a';"
+testast '(decl int a 1)(decl int b 2)(= a (= b 3))' 'int a=1;int b=2;a=b=3;'
 
 testast '"abc"' '"abc";'
 
@@ -81,6 +82,7 @@ testfail '0abc;'
 testfail '1+;'
 testfail 'a=1'
 testfail '1=2'
+testfail '"a"+1;'
 
 echo
 echo "All tests passed."

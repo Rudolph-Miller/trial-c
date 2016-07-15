@@ -1,13 +1,18 @@
 CFLAGS = -Wall -std=gnu99 -g
+CFILES = src/lex.c src/string.c src/util.c
 
 all: build
 
 build: main
 
 main:
-	clang $(CFLAGS) -o bin/trial-c src/main.c src/lex.c src/string.c
+	clang $(CFLAGS) -o bin/trial-c src/main.c $(CFILES)
 
-test: main
+unittest: main
+	clang $(CFLAGS) -o bin/unittest src/unittest.c $(CFILES)
+
+test: main unittest
+	bin/unittest
 	bin/test.sh
 
 clean:
