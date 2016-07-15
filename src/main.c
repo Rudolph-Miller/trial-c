@@ -431,9 +431,6 @@ static void emit_expr(Ast *ast) {
       printf("mov -%d(%%rbp), %%rax\n\t", ast->vpos * 8);
       break;
     case AST_FUNCALL:
-      for (int i = 1; i < ast->nargs; i++) {
-        printf("push %%%s\n\t", REGS[i]);
-      }
       for (int i = 0; i < ast->nargs; i++) {
         emit_expr(ast->args[i]);
         printf("push %%rax\n\t");
@@ -443,9 +440,6 @@ static void emit_expr(Ast *ast) {
       }
       printf("mov $0, %%rax\n\t");
       printf("call _%s\n\t", ast->fname);
-      for (int i = ast->nargs - 1; i > 0; i--) {
-        printf("pop %%%s\n\t", REGS[i]);
-      }
       break;
     case AST_DECL:
       emit_assign(ast->decl_var, ast->decl_init);

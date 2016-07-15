@@ -80,6 +80,8 @@ test 102 'int a=1;int b=48+2;int c=a+b;c*2;'
 test 25 'sum2(20, 5);'
 test 15 'sum5(1, 2, 3, 4, 5);'
 test a3 'printf("a");3;'
+test abc5 'printf("%s", "abc");5;'
+test b1 "printf(\"%c\", 'a'+1);1;"
 
 test 61 'int a=61; int *b=&a;*b;'
 
