@@ -42,13 +42,13 @@ static Token *make_char(char c) {
   return r;
 }
 
-static void skip_spaces(void) {
+static int getc_nonspace(void) {
   int c;
   while ((c = getc(stdin)) != EOF) {
-    if (isspace(c)) continue;
-    ungetc(c, stdin);
-    return;
+    if (isspace(c) || c == '\n' || c == '\r') continue;
+    return c;
   }
+  return EOF;
 }
 
 static Token *read_number(char c) {
@@ -108,8 +108,7 @@ static Token *read_ident(char c) {
 }
 
 static Token *read_token_int(void) {
-  skip_spaces();
-  int c = getc(stdin);
+  int c = getc_nonspace();
   switch (c) {
     case '0':
     case '1':
@@ -230,6 +229,12 @@ bool is_punct(Token *tok, char c) {
 void unget_token(Token *tok) {
   if (ungotten) error("Push back buffer is already full");
   ungotten = tok;
+}
+
+Token *peek_token(void) {
+  Token *tok = read_token();
+  unget_token(tok);
+  return tok;
 }
 
 Token *read_token(void) {
