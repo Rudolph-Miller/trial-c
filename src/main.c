@@ -1,18 +1,24 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <setjmp.h>
 #include "trial-c.h"
 
 #define EXPR_LEN 100
 #define MAX_ARGS 6
 
-enum { AST_INT, AST_CHAR, AST_VAR, AST_STR, AST_FUNCALL, AST_DECL };
+enum { AST_LITERAL, AST_VAR, AST_FUNCALL, AST_DECL, AST_ADDR, AST_DEREF };
 
-enum { CTYPE_VOID, CTYPE_INT, CTYPE_CHAR, CTYPE_STR };
+enum { CTYPE_VOID, CTYPE_INT, CTYPE_CHAR, CTYPE_STR, CTYPE_PTR };
+
+typedef struct Ctype {
+  int type;
+  struct Ctype *ptr;
+} Ctype;
 
 typedef struct Ast {
   char type;
-  char ctype;
+  Ctype *ctype;
   union {
     // Integer
     int ival;
@@ -35,6 +41,10 @@ typedef struct Ast {
       struct Ast *left;
       struct Ast *right;
     };
+    // Unary operator
+    struct {
+      struct Ast *operand;
+    };
     // Function call
     struct {
       char *fname;
@@ -53,11 +63,23 @@ static Ast *vars = NULL;
 static Ast *strings = NULL;
 static char *REGS[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 
+static Ctype *ctype_int = &(Ctype){CTYPE_INT, NULL};
+static Ctype *ctype_char = &(Ctype){CTYPE_CHAR, NULL};
+static Ctype *ctype_str = &(Ctype){CTYPE_STR, NULL};
+
 static void emit_expr(Ast *ast);
 static Ast *read_expr(int prec);
 static char *ast_to_string(Ast *ast);
 
-static Ast *make_ast_op(char type, int ctype, Ast *left, Ast *right) {
+static Ast *make_ast_uop(char type, Ctype *ctype, Ast *operand) {
+  Ast *r = malloc(sizeof(Ast));
+  r->type = type;
+  r->ctype = ctype;
+  r->operand = operand;
+  return r;
+}
+
+static Ast *make_ast_binop(char type, Ctype *ctype, Ast *left, Ast *right) {
   Ast *r = malloc(sizeof(Ast));
   r->type = type;
   r->ctype = ctype;
@@ -68,21 +90,21 @@ static Ast *make_ast_op(char type, int ctype, Ast *left, Ast *right) {
 
 static Ast *make_ast_int(int val) {
   Ast *r = malloc(sizeof(Ast));
-  r->type = AST_INT;
-  r->ctype = CTYPE_INT;
+  r->type = AST_LITERAL;
+  r->ctype = ctype_int;
   r->ival = val;
   return r;
 }
 
 static Ast *make_ast_char(char c) {
   Ast *r = malloc(sizeof(Ast));
-  r->type = AST_CHAR;
-  r->ctype = CTYPE_CHAR;
+  r->type = AST_LITERAL;
+  r->ctype = ctype_char;
   r->c = c;
   return r;
 }
 
-static Ast *make_ast_var(int ctype, char *vname) {
+static Ast *make_ast_var(Ctype *ctype, char *vname) {
   Ast *r = malloc(sizeof(Ast));
   r->type = AST_VAR;
   r->ctype = ctype;
@@ -95,8 +117,8 @@ static Ast *make_ast_var(int ctype, char *vname) {
 
 static Ast *make_ast_string(char *str) {
   Ast *r = malloc(sizeof(Ast));
-  r->type = AST_STR;
-  r->ctype = CTYPE_STR;
+  r->type = AST_LITERAL;
+  r->ctype = ctype_str;
   r->sval = str;
   if (strings == NULL) {
     r->sid = 0;
@@ -112,7 +134,7 @@ static Ast *make_ast_string(char *str) {
 static Ast *make_ast_funcall(char *fname, int nargs, Ast **args) {
   Ast *r = malloc(sizeof(Ast));
   r->type = AST_FUNCALL;
-  r->ctype = CTYPE_INT;
+  r->ctype = ctype_int;
   r->fname = fname;
   r->nargs = nargs;
   r->args = args;
@@ -122,8 +144,16 @@ static Ast *make_ast_funcall(char *fname, int nargs, Ast **args) {
 static Ast *make_ast_decl(Ast *var, Ast *init) {
   Ast *r = malloc(sizeof(Ast));
   r->type = AST_DECL;
+  r->ctype = NULL;
   r->decl_var = var;
   r->decl_init = init;
+  return r;
+}
+
+static Ctype *make_ptr_type(Ctype *ctype) {
+  Ctype *r = malloc(sizeof(Ctype));
+  r->type = CTYPE_PTR;
+  r->ptr = ctype;
   return r;
 }
 
@@ -199,10 +229,6 @@ static Ast *read_prim(void) {
   }
 }
 
-static void ensure_lvalue(Ast *ast) {
-  if (ast->type != AST_VAR) error("Variable expected");
-}
-
 #define swap(a, b)     \
   {                    \
     typeof(a) tmp = b; \
@@ -210,29 +236,32 @@ static void ensure_lvalue(Ast *ast) {
     a = tmp;           \
   }
 
-static char result_type(char op, Ast *a, Ast *b) {
-  int swapped = false;
-  if (a->ctype > b->ctype) {
-    swapped = true;
-    swap(a, b);
+static Ctype *result_type_int(jmp_buf *jmpbuf, Ctype *a, Ctype *b) {
+  if (a->type == CTYPE_PTR) {
+    if (b->type != CTYPE_PTR) goto err;
+    Ctype *r = malloc(sizeof(Ctype));
+    r->type = CTYPE_PTR;
+    r->ptr = result_type_int(jmpbuf, a->ptr, b->ptr);
+    return r;
   }
-  switch (a->ctype) {
+  if (a->type > b->type) swap(a, b);
+  switch (a->type) {
     case CTYPE_VOID:
       goto err;
     case CTYPE_INT:
-      switch (b->ctype) {
+      switch (b->type) {
         case CTYPE_INT:
         case CTYPE_CHAR:
-          return CTYPE_INT;
+          return ctype_int;
         case CTYPE_STR:
           goto err;
         default:
           error("Internal error");
       }
     case CTYPE_CHAR:
-      switch (b->ctype) {
+      switch (b->type) {
         case CTYPE_CHAR:
-          return CTYPE_INT;
+          return ctype_int;
         case CTYPE_STR:
           goto err;
         default:
@@ -244,13 +273,41 @@ static char result_type(char op, Ast *a, Ast *b) {
       error("Internal error");
   }
 err:
-  if (swapped) swap(a, b);
-  error("Incompatible operands: %s and %s for %c", ast_to_string(a),
-        ast_to_string(b), op);
+  longjmp(*jmpbuf, 1);
+}
+
+static Ctype *result_type(char op, Ast *a, Ast *b) {
+  jmp_buf jmpbuf;
+  if (setjmp(jmpbuf) == 0) return result_type_int(&jmpbuf, a->ctype, b->ctype);
+  error("Incompatible operands: %c: <%s> and <%s>", op, ast_to_string(a),
+        ast_to_string(b));
+}
+
+static void ensure_lvalue(Ast *ast) {
+  if (ast->type != AST_VAR)
+    error("lvalue expected, but got %s", ast_to_string(ast));
+}
+
+static Ast *read_unary_expr(void) {
+  Token *tok = read_token();
+  if (is_punct(tok, '&')) {
+    Ast *operand = read_unary_expr();
+    ensure_lvalue(operand);
+    return make_ast_uop(AST_ADDR, make_ptr_type(operand->ctype), operand);
+  }
+  if (is_punct(tok, '*')) {
+    Ast *operand = read_unary_expr();
+    if (operand->ctype->type != CTYPE_PTR)
+      error("Pointer type expected, but got %s", ast_to_string(operand));
+    Ast *r = make_ast_uop(AST_DEREF, operand->ctype->ptr, operand);
+    return r;
+  }
+  unget_token(tok);
+  return read_prim();
 }
 
 static Ast *read_expr(int prec) {
-  Ast *ast = read_prim();
+  Ast *ast = read_unary_expr();
   if (!ast) return NULL;
   for (;;) {
     Token *tok = read_token();
@@ -266,20 +323,20 @@ static Ast *read_expr(int prec) {
     // op
     if (is_punct(tok, '=')) ensure_lvalue(ast);
     Ast *rest = read_expr(prec2 + (is_right_assoc(tok->punct) ? 0 : 1));
-    char ctype = result_type(tok->punct, ast, rest);
-    ast = make_ast_op(tok->punct, ctype, ast, rest);
+    Ctype *ctype = result_type(tok->punct, ast, rest);
+    ast = make_ast_binop(tok->punct, ctype, ast, rest);
   }
 }
 
-static int get_ctype(Token *tok) {
-  if (tok->type != TTYPE_IDENT) return -1;
-  if (!strcmp(tok->sval, "int")) return CTYPE_INT;
-  if (!strcmp(tok->sval, "char")) return CTYPE_CHAR;
-  if (!strcmp(tok->sval, "string")) return CTYPE_STR;
-  return -1;
+static Ctype *get_ctype(Token *tok) {
+  if (tok->type != TTYPE_IDENT) return NULL;
+  if (!strcmp(tok->sval, "int")) return ctype_int;
+  if (!strcmp(tok->sval, "char")) return ctype_char;
+  if (!strcmp(tok->sval, "string")) return ctype_str;
+  return NULL;
 }
 
-static bool is_type_keyword(Token *tok) { return get_ctype(tok) != -1; }
+static bool is_type_keyword(Token *tok) { return get_ctype(tok) != NULL; }
 
 static void expect(char punct) {
   Token *tok = read_token();
@@ -288,11 +345,16 @@ static void expect(char punct) {
 }
 
 struct Ast *read_decl(void) {
-  int ctype = get_ctype(read_token());
-  Token *name = read_token();
-  if (name->type != TTYPE_IDENT)
-    error("Identifier expected, but got %s", token_to_string(name));
-  Ast *var = make_ast_var(ctype, name->sval);
+  Ctype *ctype = get_ctype(read_token());
+  Token *tok;
+  for (;;) {
+    tok = read_token();
+    if (!is_punct(tok, '*')) break;
+    ctype = make_ptr_type(ctype);
+  }
+  if (tok->type != TTYPE_IDENT)
+    error("Identifer expected, but got %s", token_to_string(tok));
+  Ast *var = make_ast_var(ctype, tok->sval);
   expect('=');
   Ast *init = read_expr(0);
   return make_ast_decl(var, init);
@@ -310,7 +372,7 @@ static Ast *read_decl_or_stmt(void) {
 
 static void emit_assign(Ast *var, Ast *value) {
   emit_expr(value);
-  printf("mov %%eax, -%d(%%rbp)\n\t", var->vpos * 4);
+  printf("mov %%rax, -%d(%%rbp)\n\t", var->vpos * 8);
 }
 
 void emit_binop(Ast *ast) {
@@ -338,29 +400,35 @@ void emit_binop(Ast *ast) {
   printf("push %%rax\n\t");
   emit_expr(ast->right);
   if (ast->type == '/') {
-    printf("mov %%eax, %%ebx\n\t");
+    printf("mov %%rax, %%rbx\n\t");
     printf("pop %%rax\n\t");
     printf("mov $0, %%edx\n\t");
-    printf("idiv %%ebx\n\t");
+    printf("idiv %%rbx\n\t");
   } else {
     printf("pop %%rbx\n\t");
-    printf("%s %%ebx, %%eax\n\t", op);
+    printf("%s %%rbx, %%rax\n\t", op);
   }
 }
 
 static void emit_expr(Ast *ast) {
   switch (ast->type) {
-    case AST_INT:
-      printf("mov $%d, %%eax\n\t", ast->ival);
-      break;
-    case AST_CHAR:
-      printf("mov $%d, %%eax\n\t", ast->c);
+    case AST_LITERAL:
+      switch (ast->ctype->type) {
+        case CTYPE_INT:
+          printf("mov $%d, %%rax\n\t", ast->ival);
+          break;
+        case CTYPE_CHAR:
+          printf("mov $%d, %%rax\n\t", ast->c);
+          break;
+        case CTYPE_STR:
+          printf("lea .s%d(%%rip), %%rax\n\t", ast->sid);
+          break;
+        default:
+          error("Internal error");
+      }
       break;
     case AST_VAR:
-      printf("mov -%d(%%rbp), %%eax\n\t", ast->vpos * 4);
-      break;
-    case AST_STR:
-      printf("lea .s%d(%%rip), %%rax\n\t", ast->sid);
+      printf("mov -%d(%%rbp), %%rax\n\t", ast->vpos * 8);
       break;
     case AST_FUNCALL:
       for (int i = 1; i < ast->nargs; i++) {
@@ -373,7 +441,7 @@ static void emit_expr(Ast *ast) {
       for (int i = ast->nargs - 1; i >= 0; i--) {
         printf("pop %%%s\n\t", REGS[i]);
       }
-      printf("mov $0, %%eax\n\t");
+      printf("mov $0, %%rax\n\t");
       printf("call _%s\n\t", ast->fname);
       for (int i = ast->nargs - 1; i > 0; i--) {
         printf("pop %%%s\n\t", REGS[i]);
@@ -381,6 +449,15 @@ static void emit_expr(Ast *ast) {
       break;
     case AST_DECL:
       emit_assign(ast->decl_var, ast->decl_init);
+      break;
+    case AST_ADDR:
+      assert(ast->operand->type == AST_VAR);
+      printf("lea -%d(%%rbp), %%rax\n\t", ast->operand->vpos * 8);
+      break;
+    case AST_DEREF:
+      assert(ast->operand->ctype->type == CTYPE_PTR);
+      emit_expr(ast->operand);
+      printf("mov (%%rax), %%rax\n\t");
       break;
     default:
       emit_binop(ast);
@@ -397,8 +474,8 @@ static char *quote(char *p) {
   return get_cstring(s);
 }
 
-static char *ctype_to_string(int ctype) {
-  switch (ctype) {
+static char *ctype_to_string(Ctype *ctype) {
+  switch (ctype->type) {
     case CTYPE_VOID:
       return "void";
     case CTYPE_INT:
@@ -407,6 +484,12 @@ static char *ctype_to_string(int ctype) {
       return "char";
     case CTYPE_STR:
       return "string";
+    case CTYPE_PTR: {
+      String *s = make_string();
+      string_appendf(s, "%s", ctype_to_string(ctype->ptr));
+      string_append(s, '*');
+      return get_cstring(s);
+    }
     default:
       error("Unkonwn ctype: %d", ctype);
   }
@@ -414,17 +497,23 @@ static char *ctype_to_string(int ctype) {
 
 static void ast_to_string_int(Ast *ast, String *buf) {
   switch (ast->type) {
-    case AST_INT:
-      string_appendf(buf, "%d", ast->ival);
-      break;
-    case AST_CHAR:
-      string_appendf(buf, "'%c'", ast->c);
+    case AST_LITERAL:
+      switch (ast->ctype->type) {
+        case CTYPE_INT:
+          string_appendf(buf, "%d", ast->ival);
+          break;
+        case CTYPE_CHAR:
+          string_appendf(buf, "'%c'", ast->c);
+          break;
+        case CTYPE_STR:
+          string_appendf(buf, "\"%s\"", quote(ast->sval));
+          break;
+        default:
+          error("Internal error");
+      }
       break;
     case AST_VAR:
       string_appendf(buf, "%s", ast->vname);
-      break;
-    case AST_STR:
-      string_appendf(buf, "\"%s\"", quote(ast->sval));
       break;
     case AST_FUNCALL:
       string_appendf(buf, "%s(", ast->fname);
@@ -438,6 +527,12 @@ static void ast_to_string_int(Ast *ast, String *buf) {
       string_appendf(buf, "(decl %s %s %s)",
                      ctype_to_string(ast->decl_var->ctype),
                      ast->decl_var->vname, ast_to_string(ast->decl_init));
+      break;
+    case AST_ADDR:
+      string_appendf(buf, "(& %s)", ast_to_string(ast->operand));
+      break;
+    case AST_DEREF:
+      string_appendf(buf, "(* %s)", ast_to_string(ast->operand));
       break;
     default: {
       char *left = ast_to_string(ast->left);
@@ -479,7 +574,9 @@ int main(int argc, char **argv) {
         ".text\n\t"
         ".global _mymain\n"
         "_mymain:\n\t"
-        "push %%rbp\n\t");
+        "push %%rbp\n\t"
+        "mov %%rsp, %%rbp\n\t");
+    if (vars) printf("sub $%d, %%rsp\n\t", vars->vpos * 8);
   }
   for (i = 0; i < nexpr; i++) {
     if (wantast) {
@@ -490,7 +587,7 @@ int main(int argc, char **argv) {
   }
   if (!wantast) {
     printf(
-        "pop %%rbp\n\t"
+        "leave\n\t"
         "ret\n");
   }
   return 0;
