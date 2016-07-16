@@ -84,13 +84,13 @@ test abc5 'printf("%s", "abc");5;'
 test b1 "printf(\"%c\", 'a'+1);1;"
 
 test 61 'int a=61; int *b=&a;*b;'
+test 97 'char *c="ab";*c;'
+test 98 'char *c="ab"+1;*c;'
 
 testfail '0abc;'
 testfail '1+;'
 testfail 'a=1'
 testfail '1=2'
-
-testfail '"a"+1;'
 
 testfail '&"a";'
 testfail '&1;'
