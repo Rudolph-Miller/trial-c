@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdarg.h>
 #include <stdlib.h>
+#include "trial-c.h"
 
 void errorf(char *file, int line, char *fmt, ...) {
   fprintf(stderr, "%s:%d: ", file, line);
@@ -19,4 +20,14 @@ void warn(char *fmt, ...) {
   vfprintf(stderr, fmt, args);
   va_end(args);
   fprintf(stderr, "\n");
+}
+
+char *quote_cstring(char *p) {
+  String *s = make_string();
+  while (*p) {
+    if (*p == '\"' || *p == '\\') string_append(s, '\\');
+    string_append(s, *p);
+    p++;
+  }
+  return get_cstring(s);
 }
