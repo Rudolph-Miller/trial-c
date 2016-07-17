@@ -3,6 +3,8 @@
 
 static char *REGS[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 
+static void emit_expr(Ast *ast);
+
 static int ctype_size(Ctype *ctype) {
   switch (ctype->type) {
     case CTYPE_CHAR:
@@ -272,6 +274,23 @@ void emit_expr(Ast *ast) {
       printf("mov (%%rax), %s\n\t", reg);
       printf("mov %%rbx, %%rax\n\t");
       break;
+    case AST_IF: {
+      emit_expr(ast->cond);
+      char *l1 = make_next_label();
+      printf("test %%rax, %%rax\n\t");
+      printf("je %s\n\t", l1);
+      emit_block(ast->then);
+      if (ast->els) {
+        char *l2 = make_next_label();
+        printf("jmp %s\n\t", l2);
+        printf("%s:\n\t", l1);
+        emit_block(ast->els);
+        printf("%s:\n\t", l2);
+      } else {
+        printf("%s:\n\t", l1);
+      }
+      break;
+    }
     default:
       emit_binop(ast);
   }
@@ -307,4 +326,10 @@ void print_asm_header(void) {
       "push %%rbp\n\t"
       "mov %%rsp, %%rbp\n\t");
   if (locals) printf("sub $%d, %%rsp\n\t", off);
+}
+
+void emit_block(Ast **block) {
+  for (int i = 0; block[i]; i++) {
+    emit_expr(block[i]);
+  }
 }
