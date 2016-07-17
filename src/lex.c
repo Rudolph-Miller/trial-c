@@ -189,6 +189,10 @@ static Token *read_token_int(void) {
     case ',':
     case ';':
     case '&':
+    case '[':
+    case ']':
+    case '{':
+    case '}':
       return make_punct(c);
     case EOF:
       return NULL;
