@@ -1,7 +1,8 @@
 #include <stdio.h>
+#include <string.h>
 #include "trial-c.h"
 
-bool is_in_forloop = false;
+bool is_top_block = true;
 
 static char *REGS[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 
@@ -113,6 +114,27 @@ static void emit_lsave(Ctype *ctype, int loff, int off) {
   printf("mov %%%s, %d(%%rbp)\n\t", reg, -(loff + off * size));
 }
 
+static void emit_deref(Ast *var, Ast *value) {
+  emit_expr(var->operand);
+  printf("push %%rax\n\t");
+  emit_expr(value);
+  printf("pop %%rcx\n\t");
+  char *reg;
+  int size = ctype_size(var->operand->ctype);
+  switch (size) {
+    case 1:
+      reg = "al";
+      break;
+    case 4:
+      reg = "eax";
+      break;
+    case 8:
+      reg = "rax";
+      break;
+  }
+  printf("mov %%%s, (%%rcx)\n\t", reg);
+}
+
 static void emit_pointer_arith(char op, Ast *left, Ast *right) {
   assert(left->ctype->type == CTYPE_PTR);
   emit_expr(left);
@@ -140,6 +162,9 @@ static void emit_assign(Ast *var, Ast *value) {
       break;
     case AST_GREF:
       emit_gsave(var->gref, var->goff);
+      break;
+    case AST_DEREF:
+      emit_deref(var, value);
       break;
     default:
       error("Internal error");
@@ -237,7 +262,7 @@ static void emit_expr(Ast *ast) {
       }
       break;
     case AST_FUNCALL:
-      if (is_in_forloop) {
+      if (!is_top_block) {
         for (int i = 1; i < list_len(ast->args); i++)
           printf("push %%%s\n\t", REGS[i]);
       }
@@ -250,7 +275,7 @@ static void emit_expr(Ast *ast) {
       }
       printf("mov $0, %%eax\n\t");
       printf("call _%s\n\t", ast->fname);
-      if (is_in_forloop) {
+      if (!is_top_block) {
         for (int i = list_len(ast->args) - 1; i > 0; i--)
           printf("pop %%%s\n\t", REGS[i]);
       }
@@ -331,9 +356,10 @@ static void emit_expr(Ast *ast) {
         printf("test %%rax, %%rax\n\t");
         printf("je %s\n\t", end);
       }
-      is_in_forloop = true;
+      bool tmp = is_top_block;
+      is_top_block = false;
       emit_block(ast->forbody);
-      is_in_forloop = false;
+      is_top_block = tmp;
       if (ast->forstep) emit_expr(ast->forstep);
       printf("jmp %s\n\t", begin);
       printf("%s:\n\t", end);
@@ -409,7 +435,10 @@ static void emit_block(List *block) {
 
 void emit_func(Ast *func) {
   assert(func->type == AST_FUNC);
+  bool tmp = is_top_block;
+  if (strcmp(func->fname, "f")) is_top_block = false;
   emit_func_prologue(func);
   emit_block(func->body);
+  is_top_block = tmp;
   emit_func_epilogue();
 }

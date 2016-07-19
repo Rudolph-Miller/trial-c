@@ -25,8 +25,12 @@ void warn(char *fmt, ...) {
 char *quote_cstring(char *p) {
   String *s = make_string();
   while (*p) {
-    if (*p == '\"' || *p == '\\') string_append(s, '\\');
-    string_append(s, *p);
+    if (*p == '\"' || *p == '\\')
+      string_appendf(s, "\\%c", *p);
+    else if (*p == '\n')
+      string_appendf(s, "\\n");
+    else
+      string_append(s, *p);
     p++;
   }
   return get_cstring(s);

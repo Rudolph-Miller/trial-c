@@ -86,7 +86,17 @@ static Token *read_string(void) {
     if (c == '"') break;
     if (c == '\\') {
       c = getc(stdin);
-      if (c == EOF) error("Unterminated \\");
+      switch (c) {
+        case EOF:
+          error("Unterminated \\");
+        case '\"':
+          break;
+        case 'n':
+          c = '\n';
+          break;
+        default:
+          error("Unknown quote: %c", c);
+      }
     }
     string_append(s, c);
   }
