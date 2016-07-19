@@ -19,6 +19,7 @@ static Ctype *make_ptr_type(Ctype *ctype);
 static Ctype *make_array_type(Ctype *ctype, int size);
 static void ast_to_string_int(Ast *ast, String *buf);
 static List *read_block(void);
+static Ast *read_decl_or_stmt(void);
 
 static Ast *ast_uop(char type, Ctype *ctype, Ast *operand) {
   Ast *r = malloc(sizeof(Ast));
@@ -192,12 +193,15 @@ static int priority(char op) {
   switch (op) {
     case '=':
       return 1;
+    case '<':
+    case '>':
+      return 2;
     case '+':
     case '-':
-      return 2;
+      return 3;
     case '*':
     case '/':
-      return 3;
+      return 4;
     default:
       return -1;
   }
