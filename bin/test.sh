@@ -66,6 +66,7 @@ testast '(int)f(){(decl int a 1);(decl int b 2);(= a (= b 3));}' 'int a=1;int b=
 testast '(int)f(){(decl int a 3);(& a);}' 'int a=3;&a;'
 testast '(int)f(){(decl int a 3);(* (& a));}' 'int a=3;*&a;'
 testast '(int)f(){(decl int a 3);(decl int* b (& a));(* b);}' 'int a=3;int *b=&a;*b;'
+testast '(int)f(){(for (decl int a 1) 3 7 {5;});}' 'for(int a=1;3;7){5;}'
 testast '(int)f(){"abc";}' '"abc";'
 testast "(int)f(){'c';}" "'c';"
 testast '(int)f(){(int)a();}' 'a();'
@@ -84,6 +85,10 @@ test 3 '24/2/4;'
 test 98 "'a' + 1;"
 
 test 2 '1;2;'
+
+test 1 '1<2;'
+test 0 '1>2;'
+
 test 3 'int a=1;a+2;'
 test 102 'int a=1;int b=48+2;int c=a+b;c*2;'
 test 55 'int a[1]={55};int *b=a;*b;'
@@ -103,6 +108,8 @@ test 'a1' 'if(1){printf("a");}1;'
 test '1' 'if(0){printf("a");}1;'
 test 'x1' 'if(1){printf("x");}else{printf("y");}1;'
 test 'y1' 'if(0){printf("x");}else{printf("y");}1;'
+
+test 012340 'for(int i=0; i<5; i=i+1){printf("%d", i);}0;'
 
 testf '102' 'int f(int n){n;}'
 testf 77 'int g(){77;} int f(){g();}'

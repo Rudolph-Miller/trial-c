@@ -1,6 +1,8 @@
 #include <stdio.h>
 #include "trial-c.h"
 
+bool is_in_forloop = false;
+
 static char *REGS[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 
 static void emit_expr(Ast *ast);
@@ -235,6 +237,10 @@ static void emit_expr(Ast *ast) {
       }
       break;
     case AST_FUNCALL:
+      if (is_in_forloop) {
+        for (int i = 1; i < list_len(ast->args); i++)
+          printf("push %%%s\n\t", REGS[i]);
+      }
       for (Iter *i = list_iter(ast->args); !iter_end(i);) {
         emit_expr(iter_next(i));
         printf("push %%rax\n\t");
@@ -244,6 +250,10 @@ static void emit_expr(Ast *ast) {
       }
       printf("mov $0, %%eax\n\t");
       printf("call _%s\n\t", ast->fname);
+      if (is_in_forloop) {
+        for (int i = list_len(ast->args) - 1; i > 0; i--)
+          printf("pop %%%s\n\t", REGS[i]);
+      }
       break;
     case AST_DECL:
       if (ast->declinit->type == AST_ARRAY_INIT) {
@@ -296,19 +306,37 @@ static void emit_expr(Ast *ast) {
       break;
     case AST_IF: {
       emit_expr(ast->cond);
-      char *l1 = make_label();
+      char *ne = make_label();
       printf("test %%rax, %%rax\n\t");
-      printf("je %s\n\t", l1);
+      printf("je %s\n\t", ne);
       emit_block(ast->then);
       if (ast->els) {
-        char *l2 = make_label();
-        printf("jmp %s\n\t", l2);
-        printf("%s:\n\t", l1);
+        char *end = make_label();
+        printf("jmp %s\n\t", end);
+        printf("%s:\n\t", ne);
         emit_block(ast->els);
-        printf("%s:\n\t", l2);
+        printf("%s:\n\t", end);
       } else {
-        printf("%s:\n\t", l1);
+        printf("%s:\n\t", ne);
       }
+      break;
+    }
+    case AST_FOR: {
+      if (ast->forinit) emit_expr(ast->forinit);
+      char *begin = make_label();
+      char *end = make_label();
+      printf("%s:\n\t", begin);
+      if (ast->forcond) {
+        emit_expr(ast->forcond);
+        printf("test %%rax, %%rax\n\t");
+        printf("je %s\n\t", end);
+      }
+      is_in_forloop = true;
+      emit_block(ast->forbody);
+      is_in_forloop = false;
+      if (ast->forstep) emit_expr(ast->forstep);
+      printf("jmp %s\n\t", begin);
+      printf("%s:\n\t", end);
       break;
     }
     default:

@@ -156,6 +156,17 @@ static Ast *ast_if(Ast *cond, List *then, List *els) {
   return r;
 }
 
+static Ast *ast_for(Ast *init, Ast *cond, Ast *step, List *body) {
+  Ast *r = malloc(sizeof(Ast));
+  r->type = AST_FOR;
+  r->ctype = NULL;
+  r->forinit = init;
+  r->forcond = cond;
+  r->forstep = step;
+  r->forbody = body;
+  return r;
+}
+
 static Ctype *make_ptr_type(Ctype *ctype) {
   Ctype *r = malloc(sizeof(Ctype));
   r->type = CTYPE_PTR;
@@ -478,10 +489,39 @@ static Ast *read_if_stmt(void) {
   return ast_if(cond, then, els);
 }
 
+static Ast *read_opt_decl_or_stmt(void) {
+  Token *tok = read_token();
+  if (is_punct(tok, ';')) return NULL;
+  unget_token(tok);
+  return read_decl_or_stmt();
+}
+
+static Ast *read_opt_expr(void) {
+  Token *tok = read_token();
+  if (is_punct(tok, ';')) return NULL;
+  unget_token(tok);
+  Ast *r = read_expr(0);
+  expect(';');
+  return r;
+}
+
+static Ast *read_for_stmt(void) {
+  expect('(');
+  Ast *init = read_opt_decl_or_stmt();
+  Ast *cond = read_opt_expr();
+  Ast *step = is_punct(peek_token(), ')') ? NULL : read_expr(0);
+  expect(')');
+  expect('{');
+  List *body = read_block();
+  return ast_for(init, cond, step, body);
+}
+
 static Ast *read_stmt(void) {
   Token *tok = read_token();
   if (tok->type == TTYPE_IDENT && !strcmp(tok->sval, "if"))
     return read_if_stmt();
+  if (tok->type == TTYPE_IDENT && !strcmp(tok->sval, "for"))
+    return read_for_stmt();
   unget_token(tok);
   Ast *r = read_expr(0);
   expect(';');
@@ -663,6 +703,11 @@ static void ast_to_string_int(Ast *ast, String *buf) {
                      block_to_string(ast->then));
       if (ast->els) string_appendf(buf, " %s", block_to_string(ast->els));
       string_append(buf, ')');
+      break;
+    case AST_FOR:
+      string_appendf(buf, "(for %s %s %s ", ast_to_string(ast->forinit),
+                     ast_to_string(ast->forcond), ast_to_string(ast->forstep));
+      string_appendf(buf, "%s)", block_to_string(ast->forbody));
       break;
     default: {
       char *left = ast_to_string(ast->left);

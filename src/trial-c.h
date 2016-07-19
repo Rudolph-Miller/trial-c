@@ -36,7 +36,8 @@ enum {
   AST_ARRAY_INIT,
   AST_ADDR,
   AST_DEREF,
-  AST_IF
+  AST_IF,
+  AST_FOR
 };
 
 enum { CTYPE_VOID, CTYPE_INT, CTYPE_CHAR, CTYPE_ARRAY, CTYPE_PTR };
@@ -113,6 +114,13 @@ typedef struct Ast {
       struct Ast *cond;
       struct List *then;
       struct List *els;
+    };
+    // For statement
+    struct {
+      struct Ast *forinit;
+      struct Ast *forcond;
+      struct Ast *forstep;
+      struct List *forbody;
     };
   };
 } Ast;
