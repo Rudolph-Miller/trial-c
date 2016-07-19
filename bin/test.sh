@@ -111,6 +111,8 @@ test 'y1' 'if(0){printf("x");}else{printf("y");}1;'
 
 test 012340 'for(int i=0; i<5; i=i+1){printf("%d", i);}0;'
 
+test 33 'return 33; return 10;'
+
 testf '102' 'int f(int n){n;}'
 testf 77 'int g(){77;} int f(){g();}'
 testf 79 'int g(int a){a;} int f(){g(79);}'

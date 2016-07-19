@@ -37,7 +37,8 @@ enum {
   AST_ADDR,
   AST_DEREF,
   AST_IF,
-  AST_FOR
+  AST_FOR,
+  AST_RETURN
 };
 
 enum { CTYPE_VOID, CTYPE_INT, CTYPE_CHAR, CTYPE_ARRAY, CTYPE_PTR };
@@ -122,6 +123,8 @@ typedef struct Ast {
       struct Ast *forstep;
       struct List *forbody;
     };
+    // Return statement
+    struct Ast *retval;
   };
 } Ast;
 
