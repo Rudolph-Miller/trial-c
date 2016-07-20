@@ -71,6 +71,10 @@ testast '(int)f(){"abc";}' '"abc";'
 testast "(int)f(){'c';}" "'c';"
 testast '(int)f(){(int)a();}' 'a();'
 testast '(int)f(){(int)a(1,2,3,4,5);}' 'a(1,2,3,4,5);'
+testast '(int)f(){(return 1);}' 'return 1;'
+testast '(int)f(){(< 1 2);}' '1<2;'
+testast '(int)f(){(> 1 2);}' '1>2;'
+testast '(int)f(){(== 1 2);}' '1==2;'
 
 test 0 '0;'
 
@@ -85,9 +89,13 @@ test 3 '24/2/4;'
 test 98 "'a' + 1;"
 
 test 2 '1;2;'
+test -1 'int a=0-1;a;'
+test 0 'int a=0-1;1+a;'
 
 test 1 '1<2;'
 test 0 '1>2;'
+test 1 '1==1;'
+test 0 '1==2;'
 
 test 3 'int a=1;a+2;'
 test 102 'int a=1;int b=48+2;int c=a+b;c*2;'
@@ -121,6 +129,7 @@ testf 21 'int g(int a,int b,int c,int d,int e,int f){a+b+c+d+e+f;} int f(){g(1,2
 testf 79 'int g(int a){a;} int f(){g(79);}'
 testf 98 'int g(int *p){*p;} int f(){int a[1]={98};g(a);}'
 testf '99 98 97 1' 'int g(int *p){printf("%d ",*p);p=p+1;printf("%d ",*p);p=p+1;printf("%d ",*p);1;} int f(){int a[]={1,2,3};int *p=a;*p=99;p=p+1;*p=98;p=p+1;*p=97;g(a);}'
+testf '99 98 97 1' 'int g(int *p){printf("%d ",*p);p=p+1;printf("%d ",*p);p=p+1;printf("%d ",*p);1;} int f(){int a[3];int *p=a;*p=99;p=p+1;*p=98;p=p+1;*p=97;g(a);}'
 
 testfail '0abc;'
 testfail '1+;'
