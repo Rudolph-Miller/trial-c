@@ -21,7 +21,7 @@ static Token *make_strtok(String *s) {
   return r;
 }
 
-static Token *make_punct(char punct) {
+static Token *make_punct(int punct) {
   Token *r = malloc(sizeof(Token));
   r->type = TTYPE_PUNCT;
   r->punct = punct;
@@ -117,6 +117,13 @@ static Token *read_ident(char c) {
   }
 }
 
+static Token *read_rep(int expect, int t1, int t2) {
+  int c = getc(stdin);
+  if (c == expect) return make_punct(t2);
+  ungetc(c, stdin);
+  return make_punct(t1);
+}
+
 static Token *read_token_int(void) {
   int c = getc_nonspace();
   switch (c) {
@@ -189,14 +196,12 @@ static Token *read_token_int(void) {
     case 'Z':
     case '_':
       return read_ident(c);
-    case '=': {
-      c = getc(stdin);
-      if (c == '=') return make_punct('@');
-      ungetc(c, stdin);
-      return make_punct('=');
-    }
+    case '=':
+      return read_rep('=', '=', PUNCT_EQ);
     case '+':
+      return read_rep('+', '+', PUNCT_INC);
     case '-':
+      return read_rep('-', '-', PUNCT_DEC);
     case '*':
     case '/':
     case '(':
@@ -225,7 +230,7 @@ char *token_to_string(Token *tok) {
     case TTYPE_IDENT:
       return tok->sval;
     case TTYPE_PUNCT:
-      if (is_punct(tok, '@'))
+      if (is_punct(tok, PUNCT_EQ))
         string_appendf(s, "==");
       else
         string_appendf(s, "%c", tok);
@@ -247,7 +252,7 @@ char *token_to_string(Token *tok) {
   }
 }
 
-bool is_punct(Token *tok, char c) {
+bool is_punct(Token *tok, int c) {
   return tok && tok->type == TTYPE_PUNCT && tok->punct == c;
 }
 
