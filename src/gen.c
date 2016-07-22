@@ -9,7 +9,6 @@ static char *REGS[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 static int TAB = 8;
 
 static void emit_expr(Ast *ast);
-static void emit_block(List *block);
 
 #define emit(...) emitf(__LINE__, "\t" __VA_ARGS__)
 #define emit_label(...) emitf(__LINE__, __VA_ARGS__)
@@ -338,12 +337,12 @@ static void emit_expr(Ast *ast) {
       char *ne = make_label();
       emit("test %%rax, %%rax");
       emit("je %s", ne);
-      emit_block(ast->then);
+      emit_expr(ast->then);
       if (ast->els) {
         char *end = make_label();
         emit("jmp %s", end);
         emit_label("%s:", ne);
-        emit_block(ast->els);
+        emit_expr(ast->els);
         emit_label("%s:", end);
       } else {
         emit_label("%s:", ne);
@@ -362,7 +361,7 @@ static void emit_expr(Ast *ast) {
       }
       bool tmp = is_top_block;
       is_top_block = false;
-      emit_block(ast->forbody);
+      emit_expr(ast->forbody);
       is_top_block = tmp;
       if (ast->forstep) emit_expr(ast->forstep);
       emit("jmp %s", begin);
@@ -373,6 +372,12 @@ static void emit_expr(Ast *ast) {
       emit_expr(ast->retval);
       emit("leave");
       emit("ret");
+      break;
+    }
+    case AST_COMPOUND_STMT: {
+      for (Iter *i = list_iter(ast->stmts); !iter_end(i);) {
+        emit_expr(iter_next(i));
+      }
       break;
     }
     case PUNCT_INC:
@@ -437,18 +442,12 @@ static void emit_func_epilogue(void) {
   emit("ret");
 }
 
-static void emit_block(List *block) {
-  for (Iter *i = list_iter(block); !iter_end(i);) {
-    emit_expr(iter_next(i));
-  }
-}
-
 void emit_func(Ast *func) {
   assert(func->type == AST_FUNC);
   bool tmp = is_top_block;
   if (strcmp(func->fname, "f")) is_top_block = false;
   emit_func_prologue(func);
-  emit_block(func->body);
+  emit_expr(func->body);
   is_top_block = tmp;
   emit_func_epilogue();
 }
