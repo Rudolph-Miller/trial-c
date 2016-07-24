@@ -35,6 +35,7 @@ enum {
   AST_ADDR,
   AST_DEREF,
   AST_IF,
+  AST_TERNARY,
   AST_FOR,
   AST_RETURN,
   AST_COMPOUND_STMT,
@@ -100,7 +101,7 @@ typedef struct Ast {
     };
     // Array initializer
     struct List *arrayinit;
-    // If statement
+    // If statement or ternary operator
     struct {
       struct Ast *cond;
       struct Ast *then;

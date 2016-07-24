@@ -79,6 +79,7 @@ testast '(int)f(){(* (+ 1 2));}' '1[2];'
 testast '(int)f(){(decl int a 1);(++ a);}' 'int a=1;a++;'
 testast '(int)f(){(decl int a 1);(-- a);}' 'int a=1;a--;'
 testast '(int)f(){(! 1);}' '!1;'
+testast '(int)f(){(? 1 2 3);}' '1?2:3;'
 
 test 0 '0;'
 
@@ -154,6 +155,9 @@ testf 79 'int g(int a){a;} int f(){g(79);}'
 testf 21 'int g(int a,int b,int c,int d,int e,int f){a+b+c+d+e+f;} int f(){g(1,2,3,4,5,6);}'
 testf 79 'int g(int a){a;} int f(){g(79);}'
 testf 98 'int g(int *p){*p;} int f(){int a[1]={98};g(a);}'
+
+test 51 '(1+2)?51:52;'
+test 52 '(1-1)?51:52;'
 
 testfail '0abc;'
 testfail '1+;'
