@@ -145,6 +145,9 @@ testf 22 'int a;int f(){a=22;a;}'
 testf 23 'int a[3];int f(){a[1]=23;a[1];}'
 testf 25 'int a[3]={24,25,26};int f(){a[1];}'
 
+test 31 'int a=31;{int a=64;}a;'
+test 64 'int a=31;{int a=64;a;}'
+
 testf '102' 'int f(int n){n;}'
 testf 77 'int g(){77;} int f(){g();}'
 testf 79 'int g(int a){a;} int f(){g(79);}'
