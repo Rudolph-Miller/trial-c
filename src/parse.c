@@ -18,7 +18,7 @@ static int labelseq = 0;
 static Ast *read_expr(void);
 static Ctype *make_ptr_type(Ctype *ctype);
 static Ctype *make_array_type(Ctype *ctype, int size);
-static void ast_to_string_int(Ast *ast, String *buf);
+static void ast_to_string_int(String *buf, Ast *ast);
 static Ast *read_compound_stmt(void);
 static Ast *read_decl_or_stmt(void);
 static Ctype *result_type(char op, Ctype *a, Ctype *b);
@@ -255,6 +255,10 @@ static int priority(Token *tok) {
     case '<':
     case '>':
       return 6;
+    case '&':
+      return 8;
+    case '|':
+      return 10;
     case PUNCT_EQ:
       return 7;
     case PUNCT_LOGAND:
@@ -751,7 +755,16 @@ char *ctype_to_string(Ctype *ctype) {
   }
 }
 
-static void ast_to_string_int(Ast *ast, String *buf) {
+static void uop_to_string(String *buf, char *op, Ast *ast) {
+  string_appendf(buf, "(%s %s)", op, ast_to_string(ast->operand));
+}
+
+static void binop_to_string(String *buf, char *op, Ast *ast) {
+  string_appendf(buf, "(%s %s %s)", op, ast_to_string(ast->left),
+                 ast_to_string(ast->right));
+}
+
+static void ast_to_string_int(String *buf, Ast *ast) {
   if (!ast) {
     string_appendf(buf, "(nil)");
     return;
@@ -793,7 +806,7 @@ static void ast_to_string_int(Ast *ast, String *buf) {
         if (!iter_end(i)) string_append(buf, ',');
       }
       string_appendf(buf, ")");
-      ast_to_string_int(ast->body, buf);
+      ast_to_string_int(buf, ast->body);
       break;
     }
     case AST_DECL:
@@ -807,16 +820,10 @@ static void ast_to_string_int(Ast *ast, String *buf) {
     case AST_ARRAY_INIT:
       string_append(buf, '{');
       for (Iter *i = list_iter(ast->arrayinit); !iter_end(i);) {
-        ast_to_string_int(iter_next(i), buf);
+        ast_to_string_int(buf, iter_next(i));
         if (!iter_end(i)) string_append(buf, ',');
       }
       string_append(buf, '}');
-      break;
-    case AST_ADDR:
-      string_appendf(buf, "(& %s)", ast_to_string(ast->operand));
-      break;
-    case AST_DEREF:
-      string_appendf(buf, "(* %s)", ast_to_string(ast->operand));
       break;
     case AST_IF:
       string_appendf(buf, "(if %s %s", ast_to_string(ast->cond),
@@ -839,28 +846,38 @@ static void ast_to_string_int(Ast *ast, String *buf) {
     case AST_COMPOUND_STMT: {
       string_append(buf, '{');
       for (Iter *i = list_iter(ast->stmts); !iter_end(i);) {
-        ast_to_string_int(iter_next(i), buf);
+        ast_to_string_int(buf, iter_next(i));
         string_append(buf, ';');
       }
       string_append(buf, '}');
       break;
     }
+    case AST_ADDR:
+      uop_to_string(buf, "addr", ast);
+      break;
+    case AST_DEREF:
+      uop_to_string(buf, "deref", ast);
+      break;
     case PUNCT_INC:
-      string_appendf(buf, "(++ %s)", ast_to_string(ast->operand));
+      uop_to_string(buf, "++", ast);
       break;
     case PUNCT_DEC:
-      string_appendf(buf, "(-- %s)", ast_to_string(ast->operand));
+      uop_to_string(buf, "--", ast);
       break;
     case PUNCT_LOGAND:
-      string_appendf(buf, "(and %s %s)", ast_to_string(ast->left),
-                     ast_to_string(ast->right));
+      binop_to_string(buf, "and", ast);
       break;
     case PUNCT_LOGOR:
-      string_appendf(buf, "(or %s %s)", ast_to_string(ast->left),
-                     ast_to_string(ast->right));
+      binop_to_string(buf, "or", ast);
       break;
     case '!':
-      string_appendf(buf, "(! %s)", ast_to_string(ast->operand));
+      uop_to_string(buf, "!", ast);
+      break;
+    case '&':
+      binop_to_string(buf, "&", ast);
+      break;
+    case '|':
+      binop_to_string(buf, "|", ast);
       break;
     default: {
       char *left = ast_to_string(ast->left);
@@ -876,6 +893,6 @@ static void ast_to_string_int(Ast *ast, String *buf) {
 
 char *ast_to_string(Ast *ast) {
   String *s = make_string();
-  ast_to_string_int(ast, s);
+  ast_to_string_int(s, ast);
   return get_cstring(s);
 }
