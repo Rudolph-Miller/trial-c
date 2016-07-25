@@ -7,11 +7,12 @@ static char *REGS[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 static int TAB = 8;
 
 static void emit_expr(Ast *ast);
+static void emit_load_deref(Ctype *result_type, Ctype *operand_type, int off);
 
-#define emit(...) emitf(__LINE__, "\t" __VA_ARGS__)
-#define emit_label(...) emitf(__LINE__, __VA_ARGS__)
+#define emit(...) emitf(__func__, __LINE__, "\t" __VA_ARGS__)
+#define emit_label(...) emitf(__func__, __LINE__, __VA_ARGS__)
 
-void emitf(int line, char *fmt, ...) {
+void emitf(const char *func, int line, char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
   int col = vprintf(fmt, args);
@@ -20,10 +21,10 @@ void emitf(int line, char *fmt, ...) {
     if (*p == '\t') col += TAB - 1;
   }
   int space = (30 - col) > 0 ? (30 - col) : 2;
-  printf("%*c %d\n", space, '#', line);
+  printf("%*c %s:%d\n", space, '#', func, line);
 }
 
-static int ctype_size(Ctype *ctype) {
+int ctype_size(Ctype *ctype) {
   switch (ctype->type) {
     case CTYPE_CHAR:
       return 1;
@@ -33,14 +34,21 @@ static int ctype_size(Ctype *ctype) {
       return 8;
     case CTYPE_ARRAY:
       return ctype_size(ctype->ptr) * ctype->size;
+    case CTYPE_STRUCT: {
+      Ctype *last = list_last(ctype->fields);
+      return last->offset + ctype_size(last);
+    }
     default:
       error("Internal error");
   }
 }
 
-static void emit_gload(Ctype *ctype, char *label) {
+static void emit_gload(Ctype *ctype, char *label, int off) {
   if (ctype->type == CTYPE_ARRAY) {
-    emit("lea %s(%%rip), %%rax", label);
+    if (off)
+      emit("lea %s+%d(%%rip), %%rax", label, off);
+    else
+      emit("lea %s(%%rip), %%rax", label);
     return;
   }
   char *reg;
@@ -59,35 +67,38 @@ static void emit_gload(Ctype *ctype, char *label) {
     default:
       error("Unkonwn data size: %s: %d", ctype_to_string(ctype), size);
   }
-  emit("mov %s(%%rip), %%%s", label, reg);
+  if (off)
+    emit("mov %s+%d(%%rip), %%%s", label, off, reg);
+  else
+    emit("mov %s(%%rip), %%%s", label, reg);
 }
 
-static void emit_lload(Ast *var) {
-  if (var->ctype->type == CTYPE_ARRAY) {
-    emit("lea %d(%%rbp), %%rax", -var->loff);
+static void emit_lload(Ctype *ctype, int off) {
+  if (ctype->type == CTYPE_ARRAY) {
+    emit("lea %d(%%rbp), %%rax", -off);
     return;
   }
-  int size = ctype_size(var->ctype);
+  int size = ctype_size(ctype);
   switch (size) {
     case 1:
       emit("mov $0, %%eax\n\t");
-      emit("mov %d(%%rbp), %%al", -var->loff);
+      emit("mov %d(%%rbp), %%al", -off);
       break;
     case 4:
-      emit("mov %d(%%rbp), %%eax", -var->loff);
+      emit("mov %d(%%rbp), %%eax", -off);
       break;
     case 8:
-      emit("mov %d(%%rbp), %%rax", -var->loff);
+      emit("mov %d(%%rbp), %%rax", -off);
       break;
     default:
-      error("Unknown data size: %s: %d", ast_to_string(var), size);
+      error("Unknown data size: %s: %d", ctype_to_string(ctype), size);
   }
 }
 
-static void emit_gsave(Ast *var) {
-  assert(var->ctype->type != CTYPE_ARRAY);
+static void emit_gsave(char *varname, Ctype *ctype, int off) {
+  assert(ctype->type != CTYPE_ARRAY);
   char *reg;
-  int size = ctype_size(var->ctype);
+  int size = ctype_size(ctype);
   switch (size) {
     case 1:
       reg = "al";
@@ -99,12 +110,15 @@ static void emit_gsave(Ast *var) {
       reg = "rax";
       break;
     default:
-      error("Unknown data size: %s: %d", ast_to_string(var), size);
+      error("Unknown data size: %s: %d", ctype_to_string(ctype), size);
   }
-  emit("mov %%%s, %s(%%rip)", reg, var->varname);
+  if (off)
+    emit("mov %%%s, %s+%d(%%rip)", reg, varname, off);
+  else
+    emit("mov %%%s, %s(%%rip)", reg, varname);
 }
 
-static void emit_lsave(Ctype *ctype, int loff, int off) {
+static void emit_lsave(Ctype *ctype, int off) {
   char *reg;
   int size = ctype_size(ctype);
   switch (size) {
@@ -118,15 +132,13 @@ static void emit_lsave(Ctype *ctype, int loff, int off) {
       reg = "rax";
       break;
   }
-  emit("mov %%%s, %d(%%rbp)", reg, -(loff + off * size));
+  emit("mov %%%s, %d(%%rbp)", reg, -off);
 }
 
-static void emit_assign_deref(Ast *var) {
-  emit("push %%rax");
-  emit_expr(var->operand);
-  emit("pop %%rcx");
+static void emit_assign_deref_int(Ctype *ctype, int off) {
   char *reg;
-  int size = ctype_size(var->operand->ctype);
+  emit("pop %%rcx");
+  int size = ctype_size(ctype);
   switch (size) {
     case 1:
       reg = "cl";
@@ -138,7 +150,16 @@ static void emit_assign_deref(Ast *var) {
       reg = "rcx";
       break;
   }
-  emit("mov %%%s, (%%rax)", reg);
+  if (off)
+    emit("mov %%%s, %d(%%rax)", reg, off);
+  else
+    emit("mov %%%s, (%%rax)", reg);
+}
+
+static void emit_assign_deref(Ast *var) {
+  emit("push %%rax");
+  emit_expr(var->operand);
+  emit_assign_deref_int(var->operand->ctype, 0);
 }
 
 static void emit_pointer_arith(char op, Ast *left, Ast *right) {
@@ -152,17 +173,60 @@ static void emit_pointer_arith(char op, Ast *left, Ast *right) {
   emit("add %%rcx, %%rax");
 }
 
-static void emit_assign(Ast *var) {
-  if (var->type == AST_DEREF) {
-    emit_assign_deref(var);
-    return;
-  }
-  switch (var->type) {
+static void emit_assign_struct_ref(Ast *struc, Ctype *field, int off) {
+  switch (struc->type) {
     case AST_LVAR:
-      emit_lsave(var->ctype, var->loff, 0);
+      emit_lsave(field, struc->loff - field->offset - off);
       break;
     case AST_GVAR:
-      emit_gsave(var);
+      emit_gsave(struc->varname, field, field->offset + off);
+      break;
+    case AST_STRUCT_REF:
+      emit_assign_struct_ref(struc->struc, field, off + struc->field->offset);
+      break;
+    case AST_DEREF:
+      emit("push %%rax");
+      emit_expr(struc->operand);
+      emit_assign_deref_int(field, field->offset + off);
+      break;
+    default:
+      error("Internal error: %s", ast_to_string(struc));
+  }
+}
+
+static void emit_load_struct_ref(Ast *struc, Ctype *field, int off) {
+  switch (struc->type) {
+    case AST_LVAR:
+      emit_lload(field, struc->loff - field->offset - off);
+      break;
+    case AST_GVAR:
+      emit_gload(field, struc->varname, field->offset + off);
+      break;
+    case AST_STRUCT_REF:
+      emit_load_struct_ref(struc->struc, field, struc->field->offset + off);
+      break;
+    case AST_DEREF:
+      emit_expr(struc->operand);
+      emit_load_deref(struc->ctype, field, field->offset + off);
+      break;
+    default:
+      error("Internal error: %s", ast_to_string(struc));
+  }
+}
+
+static void emit_assign(Ast *var) {
+  switch (var->type) {
+    case AST_DEREF:
+      emit_assign_deref(var);
+      break;
+    case AST_STRUCT_REF:
+      emit_assign_struct_ref(var->struc, var->field, 0);
+      break;
+    case AST_LVAR:
+      emit_lsave(var->ctype, var->loff);
+      break;
+    case AST_GVAR:
+      emit_gsave(var->varname, var->ctype, 0);
       break;
     default:
       error("Internal error");
@@ -215,15 +279,16 @@ void emit_binop(Ast *ast) {
     default:
       error("Invalid operation '%d'", ast->type);
   }
-  emit_expr(ast->right);
-  emit("push %%rax");
   emit_expr(ast->left);
+  emit("push %%rax");
+  emit_expr(ast->right);
+  emit("mov %%rax, %%rcx");
   if (ast->type == '/') {
-    emit("pop %%rcx");
+    emit("pop %%rax");
     emit("mov $0, %%edx");
     emit("idiv %%rcx");
   } else {
-    emit("pop %%rcx");
+    emit("pop %%rax");
     emit("%s %%rcx, %%rax", op);
   }
 }
@@ -234,6 +299,29 @@ static void emit_inc_dec(Ast *ast, char *op) {
   emit("%s $1, %%rax", op);
   emit_assign(ast->operand);
   emit("pop %%rax");
+}
+
+static void emit_load_deref(Ctype *result_type, Ctype *operand_type, int off) {
+  if (operand_type->type == CTYPE_PTR && operand_type->ptr->type == CTYPE_ARRAY)
+    return;
+  char *reg;
+  switch (ctype_size(result_type)) {
+    case 1:
+      reg = "%cl";
+      emit("mov $0, %%rcx");
+      break;
+    case 4:
+      reg = "%ecx";
+      break;
+    case 8:
+      reg = "%rcx";
+      break;
+  }
+  if (off)
+    emit("mov %d(%%rax), %s", off, reg);
+  else
+    emit("mov (%%rax), %s", reg);
+  emit("mov %%rcx, %%rax");
 }
 
 static void emit_expr(Ast *ast) {
@@ -254,10 +342,10 @@ static void emit_expr(Ast *ast) {
       emit("lea %s(%%rip), %%rax", ast->slabel);
       break;
     case AST_LVAR:
-      emit_lload(ast);
+      emit_lload(ast->ctype, ast->loff);
       break;
     case AST_GVAR:
-      emit_gload(ast->ctype, ast->glabel);
+      emit_gload(ast->ctype, ast->glabel, 0);
       break;
     case AST_FUNCALL:
       for (int i = 0; i < list_len(ast->args); i++) emit("push %%%s", REGS[i]);
@@ -276,12 +364,12 @@ static void emit_expr(Ast *ast) {
     case AST_DECL:
       if (!ast->declinit) return;
       if (ast->declinit->type == AST_ARRAY_INIT) {
-        int i = 0;
+        int off = 0;
         for (Iter *iter = list_iter(ast->declinit->arrayinit);
              !iter_end(iter);) {
           emit_expr(iter_next(iter));
-          emit_lsave(ast->declvar->ctype->ptr, ast->declvar->loff, -i);
-          i++;
+          emit_lsave(ast->declvar->ctype->ptr, ast->declvar->loff - off);
+          off += ctype_size(ast->declvar->ctype->ptr);
         }
       } else if (ast->declvar->ctype->type == CTYPE_ARRAY) {
         assert(ast->declinit->type == AST_STRING);
@@ -291,35 +379,28 @@ static void emit_expr(Ast *ast) {
         }
         emit("movb $0, %d(%%rbp)", -(ast->declvar->loff - i));
       } else if (ast->declinit->type == AST_STRING) {
-        emit_gload(ast->declinit->ctype, ast->declinit->slabel);
-        emit_lsave(ast->declvar->ctype, ast->declvar->loff, 0);
+        emit_gload(ast->declinit->ctype, ast->declinit->slabel, 0);
+        emit_lsave(ast->declvar->ctype, ast->declvar->loff);
       } else {
         emit_expr(ast->declinit);
-        emit_lsave(ast->declvar->ctype, ast->declvar->loff, 0);
+        emit_lsave(ast->declvar->ctype, ast->declvar->loff);
       }
       break;
     case AST_ADDR:
-      emit("lea %d(%%rbp), %%rax", -ast->operand->loff);
+      switch (ast->operand->type) {
+        case AST_LVAR:
+          emit("lea %d(%%rbp), %%rax", -ast->operand->loff);
+          break;
+        case AST_GVAR:
+          emit("lea %s(%%rip), %%rax", ast->operand->glabel);
+          break;
+        default:
+          error("Internal error");
+      }
       break;
     case AST_DEREF:
       emit_expr(ast->operand);
-      char *reg;
-      switch (ctype_size(ast->ctype)) {
-        case 1:
-          reg = "%cl";
-          emit("mov $0, %%ecx");
-          break;
-        case 4:
-          reg = "%ecx";
-          break;
-        default:
-          reg = "%rcx";
-          break;
-      }
-      if (ast->operand->ctype->ptr->type != CTYPE_ARRAY) {
-        emit("mov (%%rax), %s", reg);
-        emit("mov %%rcx, %%rax");
-      }
+      emit_load_deref(ast->ctype, ast->operand->ctype, 0);
       break;
     case AST_IF:
     case AST_TERNARY: {
@@ -367,6 +448,9 @@ static void emit_expr(Ast *ast) {
       }
       break;
     }
+    case AST_STRUCT_REF:
+      emit_load_struct_ref(ast->struc, ast->field, 0);
+      break;
     case PUNCT_INC:
       emit_inc_dec(ast, "add");
       break;

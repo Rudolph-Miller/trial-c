@@ -19,6 +19,15 @@ char *ctype_to_string(Ctype *ctype) {
       string_appendf(s, "[%d]%s", ctype->size, ctype_to_string(ctype->ptr));
       return get_cstring(s);
     }
+    case CTYPE_STRUCT: {
+      String *s = make_string();
+      string_appendf(s, "(struct");
+      if (ctype->tag) string_appendf(s, " %s", ctype->tag);
+      for (Iter *i = list_iter(ctype->fields); !iter_end(i);)
+        string_appendf(s, " (%s)", ctype_to_string(iter_next(i)));
+      string_append(s, ')');
+      return get_cstring(s);
+    }
     default:
       error("Unkonwn ctype: %d", ctype);
   }
@@ -121,6 +130,11 @@ static void ast_to_string_int(String *buf, Ast *ast) {
       string_append(buf, '}');
       break;
     }
+    case AST_STRUCT_REF:
+      ast_to_string_int(buf, ast->struc);
+      string_append(buf, '.');
+      string_appendf(buf, ast->field->name);
+      break;
     case AST_ADDR:
       uop_to_string(buf, "addr", ast);
       break;

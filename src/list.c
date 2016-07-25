@@ -25,6 +25,13 @@ void list_append(List *list, void *elem) {
   list->len++;
 }
 
+void *list_last(List *list) {
+  if (!list->head) return NULL;
+  ListNode *p = list->head;
+  while (p->next) p = p->next;
+  return p->elem;
+}
+
 int list_len(List *list) { return list->len; }
 
 Iter *list_iter(List *list) {

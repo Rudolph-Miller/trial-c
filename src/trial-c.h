@@ -39,6 +39,7 @@ enum {
   AST_FOR,
   AST_RETURN,
   AST_COMPOUND_STMT,
+  AST_STRUCT_REF,
   PUNCT_EQ,
   PUNCT_INC,
   PUNCT_DEC,
@@ -46,12 +47,20 @@ enum {
   PUNCT_LOGOR
 };
 
-enum { CTYPE_VOID, CTYPE_INT, CTYPE_CHAR, CTYPE_ARRAY, CTYPE_PTR };
+enum { CTYPE_VOID, CTYPE_INT, CTYPE_CHAR, CTYPE_ARRAY, CTYPE_PTR, CTYPE_STRUCT };
 
 typedef struct Ctype {
   int type;
+  // Pointer or array
   struct Ctype *ptr;
+  // Array
   int size;
+  // Struct field
+  char *name;
+  // Struct
+  char *tag;
+  List *fields;
+  int offset;
 } Ctype;
 
 typedef struct Ast {
@@ -120,12 +129,18 @@ typedef struct Ast {
     struct Ast *retval;
     // Compound statement
     struct List *stmts;
+    // Struct reference
+    struct {
+      struct Ast *struc;
+      Ctype *field;
+    };
   };
 } Ast;
 
 typedef struct Env {
   List *vars;
   struct Env *next;
+  struct List *structs;
 } Env;
 
 #define EMPTY_ENV (((Env){.vars = &EMPTY_LIST, .next = NULL}))
@@ -146,6 +161,7 @@ extern void print_asm_header(void);
 extern char *make_label(void);
 extern List *read_toplevels(void);
 
+extern int ctype_size(Ctype *ctype);
 extern void emit_data_section(void);
 extern void emit_toplevel(Ast *v);
 
