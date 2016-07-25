@@ -1,7 +1,7 @@
 function compile {
-  echo "$1" | bin/trial-c > tmp/test.s
+  echo "$1" | bin/trial-c > tmp/test.s || echo "Failed to compile $1"
   if [ $? -ne 0 ]; then
-    echo "Failed to compile $2"
+    echo "Failed to compile $1"
     exit
   fi
   gcc -o bin/test tmp/test.s
@@ -87,6 +87,7 @@ testast '(int)f(){(| 1 2);}' '1|2;'
 
 testastf '(decl (struct) a)' 'struct {} a;'
 testastf '(decl (struct (int) (char)) a)' 'struct {int x; char y;} a;'
+testastf '(decl (struct ([3]int)) a)' 'struct {int x[3];} a;'
 testast '(int)f(){(decl (struct (int)) a);a.x;}' 'struct {int x;} a; a.x;'
 
 test 0 '0;'
