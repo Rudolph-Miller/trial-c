@@ -1,5 +1,5 @@
 CFLAGS = -Wall -std=gnu99 -g
-CFILES = src/lex.c src/gen.c src/parse.c src/list.c src/string.c src/util.c
+CFILES = src/lex.c src/gen.c src/parse.c src/list.c src/string.c src/util.c src/debug.c
 
 all: build
 
