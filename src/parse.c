@@ -277,6 +277,7 @@ static int priority(Token *tok) {
   switch (tok->punct) {
     case '[':
     case '.':
+    case PUNCT_ARROW:
       return 1;
     case PUNCT_INC:
     case PUNCT_DEC:
@@ -491,6 +492,14 @@ static Ast *read_expr_int(int prec) {
       continue;
     }
     if (is_punct(tok, '.')) {
+      ast = read_struct_field(ast);
+      continue;
+    }
+    if (is_punct(tok, PUNCT_ARROW)) {
+      if (ast->ctype->type != CTYPE_PTR)
+        error("Pointer type expected, but got %s %s",
+              ctype_to_string(ast->ctype), ast_to_string(ast));
+      ast = ast_uop(AST_DEREF, ast->ctype->ptr, ast);
       ast = read_struct_field(ast);
       continue;
     }
