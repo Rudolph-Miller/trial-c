@@ -54,8 +54,9 @@ typedef struct Ctype {
   int type;
   // Pointer or array
   struct Ctype *ptr;
-  // Array
   int size;
+  // Array
+  int len;
   // Struct field
   char *name;
   // Struct
@@ -162,7 +163,6 @@ extern void print_asm_header(void);
 extern char *make_label(void);
 extern List *read_toplevels(void);
 
-extern int ctype_size(Ctype *ctype);
 extern void emit_data_section(void);
 extern void emit_toplevel(Ast *v);
 
