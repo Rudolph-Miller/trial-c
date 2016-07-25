@@ -12,17 +12,31 @@ void *make_node(void *elem) {
   ListNode *r = malloc(sizeof(ListNode));
   r->elem = elem;
   r->next = NULL;
+  r->prev = NULL;
   return r;
 }
 
-void list_append(List *list, void *elem) {
+void list_push(List *list, void *elem) {
   ListNode *node = make_node(elem);
-  if (!list->head)
+  if (!list->head) {
     list->head = node;
-  else
+  } else {
     list->tail->next = node;
+    node->prev = list->tail;
+  }
   list->tail = node;
   list->len++;
+}
+
+void *list_pop(List *list) {
+  if (!list->head) return NULL;
+  void *r = list->tail->elem;
+  list->tail = list->tail->prev;
+  if (list->tail)
+    list->tail->next = NULL;
+  else
+    list->head = NULL;
+  return r;
 }
 
 void *list_last(List *list) {
