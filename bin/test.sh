@@ -80,6 +80,8 @@ testast '(int)f(){(decl int a 1);(++ a);}' 'int a=1;a++;'
 testast '(int)f(){(decl int a 1);(-- a);}' 'int a=1;a--;'
 testast '(int)f(){(! 1);}' '!1;'
 testast '(int)f(){(? 1 2 3);}' '1?2:3;'
+testast '(int)f(){(and 1 2);}' '1&&2;'
+testast '(int)f(){(or 1 2);}' '1||2;'
 
 test 0 '0;'
 
@@ -158,6 +160,13 @@ testf 98 'int g(int *p){*p;} int f(){int a[1]={98};g(a);}'
 
 test 51 '(1+2)?51:52;'
 test 52 '(1-1)?51:52;'
+
+test 1 '55 && 2;'
+test 0 '55 && 0;'
+test 0 '0 && 55;'
+test 1 '55 || 0;'
+test 1 '0 || 55;'
+test 0 '0 || 0;'
 
 testfail '0abc;'
 testfail '1+;'

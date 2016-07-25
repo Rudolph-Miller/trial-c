@@ -138,10 +138,6 @@ static Token *read_token_int(void) {
     case '8':
     case '9':
       return read_number(c);
-    case '"':
-      return read_string();
-    case '\'':
-      return read_char();
     case 'a':
     case 'b':
     case 'c':
@@ -196,19 +192,12 @@ static Token *read_token_int(void) {
     case 'Z':
     case '_':
       return read_ident(c);
-    case '=':
-      return read_rep('=', '=', PUNCT_EQ);
-    case '+':
-      return read_rep('+', '+', PUNCT_INC);
-    case '-':
-      return read_rep('-', '-', PUNCT_DEC);
     case '*':
     case '/':
     case '(':
     case ')':
     case ',':
     case ';':
-    case '&':
     case '[':
     case ']':
     case '{':
@@ -219,6 +208,20 @@ static Token *read_token_int(void) {
     case '?':
     case ':':
       return make_punct(c);
+    case '=':
+      return read_rep('=', '=', PUNCT_EQ);
+    case '+':
+      return read_rep('+', '+', PUNCT_INC);
+    case '-':
+      return read_rep('-', '-', PUNCT_DEC);
+    case '&':
+      return read_rep('&', '&', PUNCT_LOGAND);
+    case '|':
+      return read_rep('|', '|', PUNCT_LOGOR);
+    case '"':
+      return read_string();
+    case '\'':
+      return read_char();
     case EOF:
       return NULL;
     default:
@@ -236,7 +239,7 @@ char *token_to_string(Token *tok) {
       if (is_punct(tok, PUNCT_EQ))
         string_appendf(s, "==");
       else
-        string_appendf(s, "%c", tok);
+        string_appendf(s, "%c", tok->c);
       return get_cstring(s);
     case TTYPE_CHAR: {
       string_append(s, tok->c);
