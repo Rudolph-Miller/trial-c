@@ -4,7 +4,7 @@ function compile {
     echo "Failed to compile $2"
     exit
   fi
-  gcc -o bin/test src/driver.c tmp/test.s
+  gcc -o bin/test tmp/test.s
   if [ $? -ne 0 ]; then
     echo "GCC failed: $1"
     exit
@@ -34,7 +34,7 @@ function testast {
 }
 
 function testf {
-  compile "$2"
+compile "int main(){printf(\"%d\", f());} $2"
   assertequal "$(bin/test)" "$1"
 }
 

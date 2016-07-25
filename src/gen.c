@@ -3,8 +3,6 @@
 #include <string.h>
 #include "trial-c.h"
 
-bool is_top_block = true;
-
 static char *REGS[] = {"rdi", "rsi", "rdx", "rcx", "r8", "r9"};
 static int TAB = 8;
 
@@ -262,10 +260,7 @@ static void emit_expr(Ast *ast) {
       emit_gload(ast->ctype, ast->glabel);
       break;
     case AST_FUNCALL:
-      if (!is_top_block) {
-        for (int i = 1; i < list_len(ast->args); i++)
-          emit("push %%%s", REGS[i]);
-      }
+      for (int i = 0; i < list_len(ast->args); i++) emit("push %%%s", REGS[i]);
       for (Iter *i = list_iter(ast->args); !iter_end(i);) {
         emit_expr(iter_next(i));
         emit("push %%rax");
@@ -275,10 +270,8 @@ static void emit_expr(Ast *ast) {
       }
       emit("mov $0, %%eax");
       emit("call _%s", ast->fname);
-      if (!is_top_block) {
-        for (int i = list_len(ast->args) - 1; i > 0; i--)
-          emit("pop %%%s", REGS[i]);
-      }
+      for (int i = list_len(ast->args) - 1; i >= 0; i--)
+        emit("pop %%%s", REGS[i]);
       break;
     case AST_DECL:
       if (!ast->declinit) return;
@@ -356,10 +349,7 @@ static void emit_expr(Ast *ast) {
         emit("test %%rax, %%rax");
         emit("je %s", end);
       }
-      bool tmp = is_top_block;
-      is_top_block = false;
       emit_expr(ast->forbody);
-      is_top_block = tmp;
       if (ast->forstep) emit_expr(ast->forstep);
       emit("jmp %s", begin);
       emit_label("%s:", end);
