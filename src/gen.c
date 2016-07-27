@@ -136,7 +136,7 @@ static void emit_lsave(Ctype *ctype, int off) {
 static void emit_assign_deref_int(Ctype *ctype, int off) {
   SAVE;
   char *reg;
-  emit("pop %%rcx");
+  emit("mov (%%rsp), %%rcx");
   switch (ctype->size) {
     case 1:
       reg = "cl";
@@ -152,13 +152,14 @@ static void emit_assign_deref_int(Ctype *ctype, int off) {
     emit("mov %%%s, %d(%%rax)", reg, off);
   else
     emit("mov %%%s, (%%rax)", reg);
+  emit("pop %%rax");
 }
 
 static void emit_assign_deref(Ast *var) {
   SAVE;
   emit("push %%rax");
   emit_expr(var->operand);
-  emit_assign_deref_int(var->operand->ctype, 0);
+  emit_assign_deref_int(var->operand->ctype->ptr, 0);
 }
 
 static void emit_pointer_arith(char op, Ast *left, Ast *right) {

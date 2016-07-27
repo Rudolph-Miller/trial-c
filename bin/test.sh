@@ -90,6 +90,7 @@ testastf '(decl (struct (int) (char)) a)' 'struct {int x; char y;} a;'
 testastf '(decl (struct ([3]int)) a)' 'struct {int x[3];} a;'
 testast '(int)f(){(decl (struct tag (int)) a);(decl *(struct tag (int)) p);(deref p).x;}' 'struct tag {int x;} a; struct tag *p; p->x;'
 testast '(int)f(){(decl (struct (int)) a);a.x;}' 'struct {int x;} a; a.x;'
+testast '(int)f(){(decl (struct (int)) a);a.x;}' 'union {int x;} a; a.x;'
 
 test 0 '0;'
 
@@ -194,6 +195,7 @@ testf 78 'struct tag {int a;} x; int f() { struct tag *p = &x; x.a = 78; p->a;}'
 testf 79 'struct tag {int a;} x; int f() { struct tag *p = &x; p->a = 79; x.a;}'
 testf 81 'struct tag {int a; int b;} x; int f() { struct tag *p = &x; x.b = 81; (*p).b;}'
 testf 82 'struct tag {int a; int b;} x; int f() { struct tag *p = &x; (*p).b = 82; x.b;}'
+test 100 'union tag {int a; int b;} x; x.a = 100; x.a;'
 
 testfail '0abc;'
 testfail '1+;'
