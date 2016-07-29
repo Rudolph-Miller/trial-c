@@ -5,12 +5,11 @@
 #include "util.h"
 #include "list.h"
 
-enum { TTYPE_IDENT, TTYPE_PUNCT, TTYPE_INT, TTYPE_CHAR, TTYPE_STRING };
+enum { TTYPE_IDENT, TTYPE_PUNCT, TTYPE_NUMBER, TTYPE_CHAR, TTYPE_STRING };
 
 typedef struct {
   int type;
   union {
-    int ival;
     char *sval;
     int punct;
     char c;
@@ -48,7 +47,15 @@ enum {
   PUNCT_ARROW
 };
 
-enum { CTYPE_VOID, CTYPE_INT, CTYPE_CHAR, CTYPE_ARRAY, CTYPE_PTR, CTYPE_STRUCT };
+enum {
+  CTYPE_VOID,
+  CTYPE_INT,
+  CTYPE_FLOAT,
+  CTYPE_CHAR,
+  CTYPE_ARRAY,
+  CTYPE_PTR,
+  CTYPE_STRUCT
+};
 
 typedef struct Ctype {
   int type;
@@ -71,6 +78,11 @@ typedef struct Ast {
   union {
     // Integer
     int ival;
+    // Float
+    struct {
+      float fval;
+      char *flabel;
+    };
     // Character
     char c;
     // String
@@ -167,5 +179,6 @@ extern void emit_data_section(void);
 extern void emit_toplevel(Ast *v);
 
 extern Env *globalenv;
+extern List *floats;
 
 #endif
